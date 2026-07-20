@@ -22,6 +22,7 @@ import {
   CalendarDaysIcon,
   FlagIcon,
   ImageIcon,
+  LoaderCircleIcon,
   MailPlusIcon,
   MapIcon,
   MusicIcon,
@@ -655,7 +656,7 @@ export function CampaignHubPage({ campaignId }: CampaignHubPageProps) {
       <Modal isOpen={isInviteModalOpen} onOpenChange={setIsInviteModalOpen}>
         <Modal.Backdrop className="bg-black/45" variant="blur">
           <Modal.Container placement="center" size="lg">
-            <Modal.Dialog className="relative max-h-[calc(100vh-4rem)] overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface text-rpg-text shadow-2xl">
+            <Modal.Dialog className="relative w-[min(calc(100vw-2rem),46rem)] max-h-[calc(100vh-4rem)] overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface text-rpg-text shadow-2xl">
               <Modal.Header className="!flex !flex-row !items-start !justify-between gap-4 border-b border-rpg-border px-6 py-5 text-left">
                 <div className="flex min-w-0 items-center gap-3">
                   <Modal.Icon className="grid size-10 place-items-center rounded-2xl bg-rpg-primary text-white">
@@ -682,7 +683,7 @@ export function CampaignHubPage({ campaignId }: CampaignHubPageProps) {
                 </Button>
               </Modal.Header>
 
-              <Modal.Body className="grid max-h-[calc(100vh-13rem)] gap-3 overflow-y-auto px-6 py-5">
+              <Modal.Body className="grid max-h-[calc(100vh-13rem)] gap-3 overflow-x-hidden overflow-y-auto px-6 py-5">
                 {inviteFriends.isLoading ? (
                   <p className="rounded-2xl border border-dashed border-rpg-border bg-rpg-surface-muted p-4 text-sm font-semibold text-rpg-muted">
                     Carregando amigos...
@@ -698,7 +699,11 @@ export function CampaignHubPage({ campaignId }: CampaignHubPageProps) {
                   <InviteFriendItem
                     campaignId={campaign._id}
                     inviteFriend={inviteFriend}
-                    isPending={inviteMutations.createInvite.isPending}
+                    isPending={
+                      inviteMutations.createInvite.isPending &&
+                      inviteMutations.createInvite.variables
+                        ?.recipientUserId === inviteFriend.friend.id
+                    }
                     key={inviteFriend.friend.id}
                     onInvite={(recipientUserId) =>
                       inviteMutations.createInvite.mutate({
@@ -2455,9 +2460,12 @@ function InviteFriendItem({
   onInvite: (recipientUserId: string) => void;
 }>) {
   const canInvite = inviteFriend.status === "available";
+  const buttonLabel = isPending
+    ? "Enviando..."
+    : getInviteFriendStatusLabel(inviteFriend.status, campaignId);
 
   return (
-    <div className="flex flex-col justify-between gap-3 rounded-2xl border border-rpg-border bg-rpg-surface-muted p-4 sm:flex-row sm:items-center">
+    <div className="grid gap-3 rounded-2xl border border-rpg-border bg-rpg-surface-muted p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
       <div className="flex min-w-0 items-center gap-3">
         <UserAvatar
           avatarUrl={inviteFriend.friend.avatarUrl}
@@ -2474,7 +2482,7 @@ function InviteFriendItem({
       </div>
 
       <Button
-        className={`flex w-fit items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
+        className={`flex w-full min-w-36 shrink-0 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold sm:w-auto ${
           canInvite
             ? "bg-rpg-primary text-white shadow-lg shadow-rpg-primary/20"
             : "border border-rpg-border text-rpg-muted"
@@ -2483,8 +2491,12 @@ function InviteFriendItem({
         onPress={() => onInvite(inviteFriend.friend.id)}
         variant={canInvite ? "primary" : "secondary"}
       >
-        <MailPlusIcon className="h-4 w-4" />
-        {getInviteFriendStatusLabel(inviteFriend.status, campaignId)}
+        {isPending ? (
+          <LoaderCircleIcon className="h-4 w-4 animate-spin" />
+        ) : (
+          <MailPlusIcon className="h-4 w-4" />
+        )}
+        <span className="truncate">{buttonLabel}</span>
       </Button>
     </div>
   );
