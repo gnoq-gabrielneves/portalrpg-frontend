@@ -43,8 +43,13 @@ export type CampaignSound = {
   audioUrl: string;
   createdAt?: string;
   id: string;
+  isLooping?: boolean;
+  isPlaying?: boolean;
+  lastStartedAt?: string;
   name: string;
+  playbackPosition?: number;
   type: CampaignSoundType;
+  volume?: number;
 };
 
 export type CreateCampaignSoundPayload = {
@@ -54,8 +59,12 @@ export type CreateCampaignSoundPayload = {
 };
 
 export type UpdateCampaignSoundPayload = Partial<{
+  isLooping: boolean;
+  isPlaying: boolean;
   name: string;
+  playbackPosition: number;
   type: CampaignSoundType;
+  volume: number;
 }>;
 
 export type CampaignTableToken = {
@@ -90,6 +99,7 @@ export type CampaignChatMessage = {
   authorId: string;
   authorAvatarUrl?: string;
   authorName: string;
+  characterAvatarUrl?: string;
   characterEntityId?: string;
   characterName?: string;
   createdAt?: string;

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button, Slider, Switch } from "@heroui/react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangleIcon,
@@ -21,7 +22,7 @@ import {
   MusicIcon,
   PauseIcon,
   PlayIcon,
-  RepeatIcon,
+  Repeat2Icon,
   SkullIcon,
   SaveIcon,
   SettingsIcon,
@@ -30,7 +31,9 @@ import {
   SquareIcon,
   Trash2Icon,
   UsersIcon,
+  Volume1Icon,
   Volume2Icon,
+  VolumeXIcon,
   XIcon,
 } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
@@ -39,6 +42,7 @@ import {
   type FormEvent,
   type PointerEvent,
   type ReactNode,
+  type WheelEvent,
   useCallback,
   useEffect,
   useMemo,
@@ -60,6 +64,7 @@ import {
   getCampaignChatMessages,
   setActiveCampaignMap,
   updateCampaignMap,
+  updateCampaignSound,
   updateCampaignTableToken,
 } from "../services/campaignsService";
 import {
@@ -142,6 +147,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
     enabled: Boolean(accessToken),
     queryFn: () => getCampaign(accessToken ?? "", campaignId),
     queryKey: ["campaign", campaignId],
+    refetchInterval: 2000,
   });
   const charactersQuery = useCampaignCharacters(campaignId);
 
@@ -149,10 +155,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
   const isGameMaster = campaign?.ownerId === user?.id;
   const maps = useMemo(() => campaign?.maps ?? [], [campaign?.maps]);
   const sounds = useMemo(() => campaign?.sounds ?? [], [campaign?.sounds]);
-  const tableTokens = useMemo(
-    () => campaign?.tableTokens ?? [],
-    [campaign?.tableTokens],
-  );
+  const tableTokens = useMemo(() => campaign?.tableTokens ?? [], [campaign]);
   const charactersByEntityId = useMemo(
     () =>
       new Map(
@@ -388,7 +391,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
       animate="visible"
       className={`grid w-full gap-6 2xl:gap-8 ${
         isFocusMode
-          ? "fixed inset-0 z-50 overflow-auto bg-rpg-surface p-4"
+          ? "fixed inset-0 z-50 h-dvh overflow-hidden bg-rpg-surface p-4"
           : ""
       }`}
       initial="hidden"
@@ -447,21 +450,27 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
       </AnimatePresence>
 
       <motion.section
-        className="grid gap-5"
+        className={`grid gap-5 ${isFocusMode ? "h-full min-h-0" : ""}`}
         layout
         variants={fadeInUp}
       >
         <div
           className={`grid gap-5 ${
             isFocusMode
-              ? "min-h-[calc(100vh-2rem)] xl:grid-cols-[minmax(0,1fr)_22rem]"
-              : "xl:grid-cols-[minmax(0,1fr)_22rem]"
+              ? "h-full min-h-0 xl:grid-cols-[minmax(0,1fr)_22rem]"
+              : "xl:h-[min(42rem,calc(100dvh-12rem))] xl:min-h-[30rem] xl:grid-cols-[minmax(0,1fr)_22rem]"
           }`}
         >
-          <div className={`grid min-w-0 ${isFocusMode ? "h-full" : ""}`}>
+          <div
+            className={`grid min-w-0 ${
+              isFocusMode ? "h-full min-h-0" : "xl:h-full xl:min-h-0"
+            }`}
+          >
             <section
-              className={`overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface shadow-sm ${
-                isFocusMode ? "h-full" : ""
+              className={`grid grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface shadow-sm ${
+                isFocusMode
+                  ? "h-full min-h-0"
+                  : "min-h-[30rem] xl:h-full xl:min-h-0"
               }`}
             >
               <div className="flex items-center justify-between gap-3 border-b border-rpg-border bg-rpg-surface px-4 py-3">
@@ -488,7 +497,8 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
               </div>
               <MapCanvas
                 activeMap={previewMap}
-                canMoveTokens={Boolean(isGameMaster)}
+                canMoveTokens={Boolean(campaign)}
+                canSetTokenStatus={Boolean(isGameMaster)}
                 charactersByEntityId={charactersByEntityId}
                 isFocusMode={isFocusMode}
                 isLoading={campaignQuery.isLoading}
@@ -497,6 +507,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
                 shouldSnapTokens={snapTokensToGrid}
                 tokens={tableTokens}
               />
+              <TableSharedAudio sounds={sounds} />
             </section>
           </div>
 
@@ -517,10 +528,10 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
         </div>
 
         <AnimatePresence initial={false}>
-          {!isFocusMode ? (
+          {!isFocusMode && isGameMaster ? (
             <motion.section
               animate={{ opacity: 1, y: 0 }}
-              className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-3"
+              className="grid items-start gap-4 lg:grid-cols-2 2xl:grid-cols-3"
               exit={{ opacity: 0, y: 16 }}
               initial={{ opacity: 0, y: 16 }}
               layout
@@ -534,7 +545,19 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
                   activeMapId={activeMap?.id}
                   campaignId={campaignId}
                   editingGridMapId={gridControlsMapId}
+                  gridControlsMap={
+                    previewMap && gridControlsMapId === previewMap.id
+                      ? previewMap
+                      : null
+                  }
+                  isGridControlsDirty={isGridControlsDirty}
+                  isSavingGridControls={updateMapMutation.isPending}
                   maps={maps}
+                  onChangeGridControls={(map) =>
+                    setDraftActiveMap({ map, mapId: map.id })
+                  }
+                  onCloseGridControls={() => setGridControlsMapId(null)}
+                  onSaveGridControls={(map) => updateMapMutation.mutate(map)}
                   onToggle={handleToggleMap}
                   onToggleGridControls={handleToggleGridControls}
                 />
@@ -566,34 +589,17 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
                 icon={<Volume2Icon className="h-4 w-4" />}
                 title="Sons"
               >
-                <TableSoundsPanel sounds={sounds} />
+                <TableSoundsPanel
+                  accessToken={accessToken}
+                  campaignId={campaignId}
+                  sounds={sounds}
+                />
               </TableControlCard>
             </motion.section>
           ) : null}
         </AnimatePresence>
       </motion.section>
 
-      <AnimatePresence>
-        {previewMap && gridControlsMapId === previewMap.id && !isFocusMode ? (
-          <motion.div
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            className="fixed bottom-4 right-4 z-50 w-[min(24rem,calc(100vw-2rem))] lg:right-[24rem]"
-            exit={{ opacity: 0, scale: 0.96, y: 16 }}
-            initial={{ opacity: 0, scale: 0.96, y: 16 }}
-            transition={{ duration: 0.2 }}
-          >
-            <GridControls
-              isDirty={isGridControlsDirty}
-              isSaving={updateMapMutation.isPending}
-              key={previewMap.id}
-              map={previewMap}
-              onChange={(map) => setDraftActiveMap({ map, mapId: map.id })}
-              onClose={() => setGridControlsMapId(null)}
-              onSave={(map) => updateMapMutation.mutate(map)}
-            />
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
     </motion.section>
   );
 }
@@ -613,20 +619,22 @@ function TableControlCard({
 
   return (
     <motion.details
-      className={`group overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface shadow-sm ${className}`}
+      className={`group h-fit overflow-hidden rounded-2xl border border-rpg-border bg-rpg-surface shadow-sm ${className}`}
       layout
       onToggle={(event) => setIsOpen(event.currentTarget.open)}
       open={isOpen}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-rpg-border px-5 py-4 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-4 border-b border-rpg-border px-4 py-3 [&::-webkit-details-marker]:hidden">
         <span className="flex min-w-0 items-center gap-2 text-sm font-black text-rpg-text">
-          <span className="text-rpg-primary">{icon}</span>
+          <span className="grid size-7 place-items-center rounded-lg bg-rpg-primary-soft text-rpg-primary">
+            {icon}
+          </span>
           {title}
         </span>
-        <ChevronDownIcon className="h-5 w-5 text-rpg-muted transition group-open:rotate-180" />
+        <ChevronDownIcon className="h-4 w-4 text-rpg-muted transition group-open:rotate-180" />
       </summary>
       <motion.div
-        className="grid gap-4 bg-rpg-surface-muted p-5"
+        className="grid gap-3 bg-rpg-surface-muted p-4"
         layout
         transition={{ duration: 0.2 }}
       >
@@ -656,7 +664,11 @@ function CampaignTableChatPanel({
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [isActionsMenuOpen, setIsActionsMenuOpen] = useState(false);
+  const [isReadingHistory, setIsReadingHistory] = useState(false);
   const [message, setMessage] = useState("");
+  const chatMessagesRef = useRef<HTMLDivElement | null>(null);
+  const isReadingHistoryRef = useRef(false);
+  const previousMessagesCountRef = useRef(0);
 
   const chatMessagesQuery = useQuery({
     enabled: Boolean(accessToken),
@@ -742,8 +754,64 @@ function CampaignTableChatPanel({
     createMessageMutation.mutate(trimmedMessage);
   }
 
-  const messages = chatMessagesQuery.data ?? [];
-  const chatHeightClass = isFocusMode ? "h-full" : "h-full min-h-[34rem]";
+  const messages = useMemo(
+    () => chatMessagesQuery.data ?? [],
+    [chatMessagesQuery.data],
+  );
+  const chatHeightClass = isFocusMode
+    ? "h-full"
+    : "h-[30rem] xl:h-full xl:min-h-0";
+
+  function handleChatScroll() {
+    const element = chatMessagesRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    const nextIsReadingHistory =
+      element.scrollHeight - element.scrollTop - element.clientHeight > 96;
+
+    isReadingHistoryRef.current = nextIsReadingHistory;
+    setIsReadingHistory(nextIsReadingHistory);
+  }
+
+  function scrollToLatest() {
+    const element = chatMessagesRef.current;
+
+    if (!element) {
+      return;
+    }
+
+    element.scrollTo({
+      behavior: "smooth",
+      top: element.scrollHeight,
+    });
+    isReadingHistoryRef.current = false;
+    setIsReadingHistory(false);
+  }
+
+  useEffect(() => {
+    const element = chatMessagesRef.current;
+
+    if (!element || messages.length === 0) {
+      previousMessagesCountRef.current = messages.length;
+      return;
+    }
+
+    const isFirstLoad = previousMessagesCountRef.current === 0;
+    const hasNewMessage = messages.length > previousMessagesCountRef.current;
+    previousMessagesCountRef.current = messages.length;
+
+    if (!isFirstLoad && (!hasNewMessage || isReadingHistoryRef.current)) {
+      return;
+    }
+
+    requestAnimationFrame(() => {
+      element.scrollTop = element.scrollHeight;
+      isReadingHistoryRef.current = false;
+    });
+  }, [messages]);
 
   if (isCollapsed) {
     return (
@@ -779,7 +847,7 @@ function CampaignTableChatPanel({
   return (
     <motion.aside
       animate={{ opacity: 1, x: 0 }}
-      className={`grid ${chatHeightClass} grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface shadow-sm`}
+      className={`grid ${chatHeightClass} min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden rounded-3xl border border-rpg-border bg-rpg-surface shadow-sm`}
       exit={{ opacity: 0, x: 24 }}
       initial={{ opacity: 0, x: 24 }}
       layout
@@ -862,7 +930,14 @@ function CampaignTableChatPanel({
         </div>
       </header>
 
-      <div className="grid content-start gap-3 overflow-y-auto bg-rpg-surface-muted p-4">
+      <div
+        className="relative grid min-h-0 overflow-hidden bg-rpg-surface-muted"
+      >
+        <div
+          className="grid min-h-0 content-start gap-3 overflow-y-auto p-4"
+          onScroll={handleChatScroll}
+          ref={chatMessagesRef}
+        >
         {chatMessagesQuery.isLoading ? (
           <p className="rounded-lg border border-dashed border-rpg-border bg-rpg-surface px-3 py-3 text-sm font-bold text-rpg-muted">
             Carregando chat...
@@ -885,6 +960,22 @@ function CampaignTableChatPanel({
             message={chatMessage}
           />
         ))}
+        </div>
+
+        <AnimatePresence>
+          {isReadingHistory ? (
+            <motion.button
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded-lg bg-rpg-primary px-3 py-2 text-xs font-black text-white shadow-xl shadow-rpg-primary/25"
+              exit={{ opacity: 0, y: 8 }}
+              initial={{ opacity: 0, y: 8 }}
+              onClick={scrollToLatest}
+              type="button"
+            >
+              Voltar ao mais recente
+            </motion.button>
+          ) : null}
+        </AnimatePresence>
       </div>
 
       <form
@@ -917,7 +1008,13 @@ function ChatMessageCard({
 }: Readonly<{ gameMasterId?: string; message: CampaignChatMessage }>) {
   const isRoll = message.type === "roll";
   const isGameMasterMessage = message.authorId === gameMasterId;
-  const authorAvatarUrl = getCampaignAssetUrl(message.authorAvatarUrl);
+  const displayAvatarUrl = getCampaignAssetUrl(
+    message.characterName ? message.characterAvatarUrl : message.authorAvatarUrl,
+  );
+  const rollTitle =
+    isRoll && message.text !== message.rollFormula
+      ? formatChatRollTitle(message.text)
+      : "";
 
   return (
     <article
@@ -932,14 +1029,14 @@ function ChatMessageCard({
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-2">
           <span className="grid size-9 shrink-0 place-items-center overflow-hidden rounded-lg bg-rpg-primary text-xs font-black text-white">
-            {authorAvatarUrl ? (
+            {displayAvatarUrl ? (
               <img
                 alt=""
                 className="h-full w-full object-cover"
-                src={authorAvatarUrl}
+                src={displayAvatarUrl}
               />
             ) : (
-              getCharacterInitials(message.authorName)
+              getCharacterInitials(message.characterName ?? message.authorName)
             )}
           </span>
           <div className="min-w-0">
@@ -970,9 +1067,16 @@ function ChatMessageCard({
       </div>
 
       {isRoll ? (
-        <div className="mt-2 flex items-center justify-between gap-3 rounded-md bg-rpg-primary-soft px-3 py-2">
-          <span className="text-xs font-black uppercase tracking-[0.12em] text-rpg-primary">
-            {message.rollFormula ?? message.text}
+        <div className="mt-2 grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-md bg-rpg-primary-soft px-3 py-2">
+          <span className="min-w-0">
+            {rollTitle ? (
+              <span className="block truncate text-sm font-black text-rpg-text">
+                {rollTitle}
+              </span>
+            ) : null}
+            <span className="block truncate text-xs font-black uppercase tracking-[0.12em] text-rpg-primary">
+              {message.rollFormula ?? message.text}
+            </span>
           </span>
           <span className="text-xl font-black text-rpg-primary">
             {message.rollResult ?? message.text}
@@ -985,6 +1089,10 @@ function ChatMessageCard({
       )}
     </article>
   );
+}
+
+function formatChatRollTitle(title: string) {
+  return title.replace(/[+*]+$/g, "").trim();
 }
 
 function updateTokenCache(
@@ -1010,6 +1118,7 @@ function updateTokenCache(
 function MapCanvas({
   activeMap,
   canMoveTokens,
+  canSetTokenStatus,
   charactersByEntityId,
   isFocusMode,
   isLoading,
@@ -1020,6 +1129,7 @@ function MapCanvas({
 }: Readonly<{
   activeMap: CampaignMap | null;
   canMoveTokens: boolean;
+  canSetTokenStatus: boolean;
   charactersByEntityId: Map<string, CampaignCharacter>;
   isFocusMode: boolean;
   isLoading: boolean;
@@ -1110,7 +1220,7 @@ function MapCanvas({
     return (
       <div
         className={`grid place-items-center bg-rpg-surface-muted p-6 ${
-          isFocusMode ? "h-[calc(100vh-7rem)]" : "min-h-[34rem]"
+          isFocusMode ? "h-full min-h-0" : "h-[30rem] xl:h-full"
         }`}
       >
         <p className="text-sm font-black text-rpg-muted">Carregando mesa...</p>
@@ -1122,7 +1232,7 @@ function MapCanvas({
     return (
       <div
         className={`grid place-items-center bg-rpg-surface-muted p-6 ${
-          isFocusMode ? "h-[calc(100vh-7rem)]" : "min-h-[34rem]"
+          isFocusMode ? "h-full min-h-0" : "h-[30rem] xl:h-full"
         }`}
       >
         <div className="max-w-md text-center">
@@ -1253,7 +1363,7 @@ function MapCanvas({
   }
 
   function handleTokenDoubleClick(tokenId: string) {
-    if (!canMoveTokens) {
+    if (!canSetTokenStatus) {
       return;
     }
 
@@ -1265,21 +1375,25 @@ function MapCanvas({
   return (
     <div
       className={`relative overflow-auto bg-slate-100 p-5 ${
-        isFocusMode ? "h-[calc(100vh-7rem)]" : "min-h-[34rem]"
+        isFocusMode ? "h-full min-h-0" : "h-[30rem] xl:h-full xl:min-h-0"
       }`}
     >
       <div
-        className={`relative mx-auto grid w-full min-w-[42rem] place-items-center overflow-hidden rounded-2xl border border-rpg-border bg-rpg-surface shadow-inner ${
-          isFocusMode ? "h-full" : "min-h-[34rem]"
+        className={`relative mx-auto grid place-items-center overflow-hidden rounded-2xl border border-rpg-border bg-slate-50 shadow-inner ${
+          isFocusMode
+            ? "h-full min-h-0 w-max min-w-full"
+            : "h-full min-h-0 w-full min-w-[42rem]"
         }`}
         ref={boardRef}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           alt={activeMap.name}
-          className={`max-w-full select-none object-contain ${
-            isFocusMode ? "max-h-full" : "max-h-[72vh]"
-          }`}
+          className={
+            isFocusMode
+              ? "h-full max-w-none select-none object-contain"
+              : "max-h-full max-w-full select-none object-contain"
+          }
           draggable={false}
           onLoad={updateImageMetrics}
           ref={imageRef}
@@ -1359,7 +1473,7 @@ function MapCanvas({
                 ) : null}
               </button>
 
-              {isStatusMenuOpen ? (
+              {isStatusMenuOpen && canSetTokenStatus ? (
                 <div className="absolute left-1/2 top-[calc(100%+0.5rem)] z-30 w-44 -translate-x-1/2 overflow-hidden rounded-lg border border-rpg-border bg-white p-1 shadow-xl">
                   {tokenStatusOptions.map((option) => (
                     <button
@@ -1393,14 +1507,26 @@ function MapList({
   activeMapId,
   campaignId,
   editingGridMapId,
+  gridControlsMap,
+  isGridControlsDirty,
+  isSavingGridControls,
   maps,
+  onChangeGridControls,
+  onCloseGridControls,
+  onSaveGridControls,
   onToggle,
   onToggleGridControls,
 }: Readonly<{
   activeMapId?: string;
   campaignId: string;
   editingGridMapId: string | null;
+  gridControlsMap: CampaignMap | null;
+  isGridControlsDirty: boolean;
+  isSavingGridControls: boolean;
   maps: CampaignMap[];
+  onChangeGridControls: (map: CampaignMap) => void;
+  onCloseGridControls: () => void;
+  onSaveGridControls: (map: CampaignMap) => void;
   onToggle: (mapId: string) => void;
   onToggleGridControls: (mapId: string) => void;
 }>) {
@@ -1412,46 +1538,72 @@ function MapList({
           const isEditingGrid = map.id === editingGridMapId;
 
           return (
-            <div
-              className="grid grid-cols-[minmax(0,1fr)_2.5rem] gap-2"
-              key={map.id}
-            >
-              <button
-                className={`grid grid-cols-[2.5rem_minmax(0,1fr)] items-center gap-2 rounded-lg border p-1.5 text-left transition hover:border-rpg-primary ${
-                  isActive
-                    ? "border-rpg-primary bg-rpg-primary-soft"
-                    : "border-rpg-border bg-rpg-surface-muted"
-                }`}
-                onClick={() => onToggle(map.id)}
-                type="button"
-              >
-                <span className="grid aspect-square place-items-center overflow-hidden rounded-md bg-white">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    alt=""
-                    className="h-full w-full object-cover"
-                    src={getCampaignAssetUrl(map.imageUrl)}
-                  />
-                </span>
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-black text-rpg-text">
-                    {map.name}
+            <div className="grid gap-2" key={map.id}>
+              <div className="grid grid-cols-[minmax(0,1fr)_2.5rem] items-center gap-2">
+                <button
+                  className={`grid min-h-14 grid-cols-[3rem_minmax(0,1fr)] items-center gap-3 rounded-xl border p-1.5 pr-3 text-left transition hover:border-rpg-primary ${
+                    isActive
+                      ? "border-rpg-primary bg-white shadow-sm shadow-rpg-primary/10"
+                      : "border-rpg-border bg-white"
+                  }`}
+                  onClick={() => onToggle(map.id)}
+                  type="button"
+                >
+                  <span className="grid aspect-square place-items-center overflow-hidden rounded-lg bg-rpg-surface-muted ring-1 ring-rpg-border">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      alt=""
+                      className="h-full w-full object-cover"
+                      src={getCampaignAssetUrl(map.imageUrl)}
+                    />
                   </span>
-                </span>
-              </button>
-              <button
-                aria-label={`Configurar mapa ${map.name}`}
-                className={`grid aspect-square place-items-center rounded-lg border text-rpg-muted transition hover:border-rpg-primary hover:text-rpg-primary ${
-                  isEditingGrid
-                    ? "border-rpg-primary bg-rpg-primary-soft text-rpg-primary"
-                    : "border-rpg-border bg-rpg-surface-muted"
-                }`}
-                onClick={() => onToggleGridControls(map.id)}
-                title="Configurar mapa"
-                type="button"
-              >
-                <SettingsIcon className="h-4 w-4" />
-              </button>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-black text-rpg-text">
+                      {map.name}
+                    </span>
+                    <span
+                      className={`mt-0.5 block text-xs font-bold ${
+                        isActive ? "text-rpg-primary" : "text-rpg-muted"
+                      }`}
+                    >
+                      {isActive ? "Em exibicao" : "Clique para exibir"}
+                    </span>
+                  </span>
+                </button>
+                <button
+                  aria-label={`Configurar mapa ${map.name}`}
+                  className={`grid aspect-square place-items-center rounded-xl border text-rpg-muted transition hover:border-rpg-primary hover:text-rpg-primary ${
+                    isEditingGrid
+                      ? "border-rpg-primary bg-rpg-primary-soft text-rpg-primary"
+                      : "border-rpg-border bg-white"
+                  }`}
+                  onClick={() => onToggleGridControls(map.id)}
+                  title="Configurar mapa"
+                  type="button"
+                >
+                  <SettingsIcon className="h-4 w-4" />
+                </button>
+              </div>
+
+              <AnimatePresence initial={false}>
+                {isEditingGrid && gridControlsMap ? (
+                  <motion.div
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    initial={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.18 }}
+                  >
+                    <GridControls
+                      isDirty={isGridControlsDirty}
+                      isSaving={isSavingGridControls}
+                      map={gridControlsMap}
+                      onChange={onChangeGridControls}
+                      onClose={onCloseGridControls}
+                      onSave={onSaveGridControls}
+                    />
+                  </motion.div>
+                ) : null}
+              </AnimatePresence>
             </div>
           );
         })
@@ -1520,16 +1672,39 @@ function TablePlayersPanel({
     : "Nenhum token ativo na mesa.";
 
   return (
-    <div className="grid gap-4">
-      <label className="flex items-center justify-between gap-3 rounded-lg border border-rpg-border bg-rpg-surface px-3 py-3 text-sm font-bold text-rpg-muted">
-        <span>Fixar no grid</span>
-        <input
-          checked={snapTokensToGrid}
-          className="size-4 accent-rpg-primary"
-          onChange={(event) => onSnapChange(event.target.checked)}
-          type="checkbox"
-        />
-      </label>
+    <div className="grid gap-3">
+      <div className="rounded-xl border border-rpg-border bg-white p-3">
+        <Switch
+          className="w-full"
+          isSelected={snapTokensToGrid}
+          onChange={onSnapChange}
+          size="sm"
+        >
+          {({ isSelected }) => (
+            <Switch.Content className="flex w-full items-center justify-between gap-3">
+              <span className="min-w-0">
+                <span className="block text-sm font-black text-rpg-text">
+                  Fixar tokens no grid
+                </span>
+                <span className="mt-0.5 block text-xs font-bold text-rpg-muted">
+                  {isSelected ? "Movimento alinhado" : "Movimento livre"}
+                </span>
+              </span>
+              <span
+                className={`flex h-6 w-11 shrink-0 items-center rounded-full p-1 transition ${
+                  isSelected ? "bg-rpg-primary" : "bg-rpg-border"
+                }`}
+              >
+                <span
+                  className={`block size-4 rounded-full bg-white shadow-sm transition ${
+                    isSelected ? "translate-x-5" : ""
+                  }`}
+                />
+              </span>
+            </Switch.Content>
+          )}
+        </Switch>
+      </div>
 
       {isLoading ? (
         <p className="rounded-lg border border-dashed border-rpg-border bg-rpg-surface px-3 py-3 text-sm font-bold text-rpg-muted">
@@ -1545,16 +1720,25 @@ function TablePlayersPanel({
 
             return (
               <div
-                className={`grid grid-cols-[2.25rem_minmax(0,1fr)_2.25rem_4.25rem] items-center gap-2 rounded-lg border p-1.5 ${
+                className={`grid grid-cols-[2.75rem_minmax(0,1fr)_2.25rem_auto] items-center gap-3 rounded-xl border p-1.5 pr-2 ${
                   isActive
-                    ? "border-rpg-primary bg-rpg-primary-soft"
-                    : "border-rpg-border bg-rpg-surface"
+                    ? "border-rpg-primary bg-white shadow-sm shadow-rpg-primary/10"
+                    : "border-rpg-border bg-white"
                 }`}
                 key={character.entityId}
               >
                 <TokenAvatar character={character} />
-                <span className="truncate text-sm font-black text-rpg-text">
-                  {character.name}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-black text-rpg-text">
+                    {character.name}
+                  </span>
+                  <span
+                    className={`mt-0.5 block text-xs font-bold ${
+                      isActive ? "text-rpg-primary" : "text-rpg-muted"
+                    }`}
+                  >
+                    {isActive ? "Token na mesa" : "Token oculto"}
+                  </span>
                 </span>
                 <Link
                   aria-label={`Abrir ficha de ${character.name}`}
@@ -1565,20 +1749,20 @@ function TablePlayersPanel({
                   <FileTextIcon className="h-4 w-4" />
                 </Link>
                 {isGameMaster ? (
-                  <button
-                    className={`rounded-md px-2 py-1.5 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
+                  <Button
+                    className={`rounded-lg px-3 py-2 text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-60 ${
                       isActive
                         ? "bg-rpg-primary text-white hover:bg-rpg-primary-hover"
                         : "border border-rpg-border bg-rpg-surface-muted text-rpg-muted hover:border-rpg-primary hover:text-rpg-primary"
                     }`}
-                    disabled={isCreatingToken}
-                    onClick={() => handleToggleToken(character)}
-                    type="button"
+                    isDisabled={isCreatingToken}
+                    onPress={() => handleToggleToken(character)}
+                    variant="secondary"
                   >
                     {isActive ? "Ativo" : "Ativar"}
-                  </button>
+                  </Button>
                 ) : (
-                  <span className="rounded-md bg-rpg-primary px-2 py-1.5 text-center text-xs font-black text-white">
+                  <span className="rounded-lg bg-rpg-primary px-3 py-2 text-center text-xs font-black text-white">
                     Ativo
                   </span>
                 )}
@@ -1616,7 +1800,15 @@ function TokenAvatar({
   );
 }
 
-function TableSoundsPanel({ sounds }: Readonly<{ sounds: CampaignSound[] }>) {
+function TableSoundsPanel({
+  accessToken,
+  campaignId,
+  sounds,
+}: Readonly<{
+  accessToken?: string | null;
+  campaignId: string;
+  sounds: CampaignSound[];
+}>) {
   if (sounds.length === 0) {
     return (
       <div className="grid place-items-center rounded-lg border border-dashed border-rpg-border bg-rpg-surface p-6 text-center">
@@ -1631,75 +1823,156 @@ function TableSoundsPanel({ sounds }: Readonly<{ sounds: CampaignSound[] }>) {
   return (
     <div className="grid gap-2">
       {sounds.map((sound) => (
-        <TableSoundPlayer key={sound.id} sound={sound} />
+        <TableSoundPlayer
+          accessToken={accessToken}
+          campaignId={campaignId}
+          key={sound.id}
+          sound={sound}
+        />
       ))}
     </div>
   );
 }
 
-function TableSoundPlayer({ sound }: Readonly<{ sound: CampaignSound }>) {
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [isLooping, setIsLooping] = useState(false);
-  const [isPlaying, setIsPlaying] = useState(false);
+function TableSoundPlayer({
+  accessToken,
+  campaignId,
+  sound,
+}: Readonly<{
+  accessToken?: string | null;
+  campaignId: string;
+  sound: CampaignSound;
+}>) {
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+  const isPlaying = Boolean(sound.isPlaying);
+  const isLooping = Boolean(sound.isLooping);
+  const savedVolume = sound.volume ?? 80;
+  const audioUrl = getCampaignAssetUrl(sound.audioUrl);
+  const [draftVolumeState, setDraftVolumeState] = useState<{
+    soundId: string;
+    value: number;
+  }>({ soundId: sound.id, value: savedVolume });
+  const [durationState, setDurationState] = useState<{
+    soundId: string;
+    value: number;
+  }>({ soundId: sound.id, value: 0 });
+  const [timelineNow, setTimelineNow] = useState(() => Date.now());
+  const pendingVolumeRef = useRef<number | null>(null);
+  const duration =
+    durationState.soundId === sound.id ? durationState.value : 0;
+  const draftVolume =
+    draftVolumeState.soundId === sound.id ? draftVolumeState.value : savedVolume;
+  const updateSoundMutation = useMutation({
+    mutationFn: (payload: {
+      isLooping?: boolean;
+      isPlaying?: boolean;
+      playbackPosition?: number;
+      volume?: number;
+    }) => {
+      if (!accessToken) {
+        throw new Error("Sessao indisponivel.");
+      }
 
-  function handleTogglePlay() {
-    const audio = audioRef.current;
+      return updateCampaignSound(accessToken, campaignId, sound.id, payload);
+    },
+    onError: (error) => {
+      showToast({
+        title: "Som nao atualizado",
+        description: getMutationErrorMessage(error),
+        type: "error",
+      });
+    },
+    onSuccess: (updatedCampaign) => {
+      updateCampaignCache(queryClient, campaignId, updatedCampaign);
+    },
+  });
 
-    if (!audio) {
+  useEffect(() => {
+    if (pendingVolumeRef.current === null) {
       return;
     }
 
-    if (isPlaying) {
-      audio.pause();
-      setIsPlaying(false);
+    const nextVolume = pendingVolumeRef.current;
+    const timeoutId = window.setTimeout(() => {
+      updateSoundMutation.mutate({ volume: nextVolume });
+      pendingVolumeRef.current = null;
+    }, 350);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [draftVolume, updateSoundMutation]);
+
+  useEffect(() => {
+    if (!isPlaying) {
       return;
     }
 
-    void audio.play();
-    setIsPlaying(true);
+    const intervalId = window.setInterval(() => {
+      setTimelineNow(Date.now());
+    }, 500);
+
+    return () => window.clearInterval(intervalId);
+  }, [isPlaying]);
+
+  function handleVolumeChange(nextVolume: number) {
+    const constrainedVolume = clampNumber(nextVolume, 0, 100);
+
+    setDraftVolumeState({ soundId: sound.id, value: constrainedVolume });
+    pendingVolumeRef.current = constrainedVolume;
   }
 
-  function handleStop() {
-    const audio = audioRef.current;
-
-    if (!audio) {
-      return;
-    }
-
-    audio.pause();
-    audio.currentTime = 0;
-    setCurrentTime(0);
-    setIsPlaying(false);
+  function handleVolumeWheel(event: WheelEvent<HTMLDivElement>) {
+    event.preventDefault();
+    handleVolumeChange(draftVolume + (event.deltaY > 0 ? -5 : 5));
   }
 
-  function handleSeek(value: string) {
-    const nextTime = Number(value);
-    const audio = audioRef.current;
-
-    if (!audio || Number.isNaN(nextTime)) {
-      return;
-    }
-
-    audio.currentTime = nextTime;
-    setCurrentTime(nextTime);
+  function handleTogglePlayback() {
+    updateSoundMutation.mutate({
+      isPlaying: !isPlaying,
+      playbackPosition: elapsedSeconds,
+    });
   }
 
-  function handleToggleLoop() {
-    const nextIsLooping = !isLooping;
-
-    setIsLooping(nextIsLooping);
-
-    if (audioRef.current) {
-      audioRef.current.loop = nextIsLooping;
-    }
+  function handleStopSound() {
+    updateSoundMutation.mutate({
+      isPlaying: false,
+      playbackPosition: 0,
+    });
   }
+
+  function handleSeek(nextPosition: number) {
+    updateSoundMutation.mutate({
+      isPlaying,
+      playbackPosition: clampNumber(nextPosition, 0, duration || nextPosition),
+    });
+  }
+
+  const VolumeIcon =
+    draftVolume === 0 ? VolumeXIcon : draftVolume < 50 ? Volume1Icon : Volume2Icon;
+  const elapsedSeconds = getSoundElapsedSeconds({
+    duration,
+    isLooping,
+    isPlaying,
+    now: timelineNow,
+    playbackPosition: sound.playbackPosition ?? 0,
+    startedAt: sound.lastStartedAt,
+  });
 
   return (
-    <div className="grid gap-2 rounded-lg border border-rpg-border bg-rpg-surface p-2">
-      <div className="grid grid-cols-[2.25rem_minmax(0,1fr)] items-center gap-2">
-        <span className="grid aspect-square place-items-center rounded-md bg-rpg-primary-soft text-rpg-primary">
+    <div className="grid gap-3 rounded-xl border border-rpg-border bg-white p-3 shadow-sm">
+      <audio
+        onLoadedMetadata={(event) => {
+          const nextDuration = event.currentTarget.duration;
+
+          if (Number.isFinite(nextDuration)) {
+            setDurationState({ soundId: sound.id, value: nextDuration });
+          }
+        }}
+        preload="metadata"
+        src={audioUrl}
+      />
+      <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_auto] items-center gap-3">
+        <span className="grid aspect-square place-items-center rounded-lg bg-rpg-primary-soft text-rpg-primary">
           {sound.type === "music" ? (
             <MusicIcon className="h-4 w-4" />
           ) : (
@@ -1714,74 +1987,224 @@ function TableSoundPlayer({ sound }: Readonly<{ sound: CampaignSound }>) {
             {sound.type === "music" ? "Musica" : "Efeito"}
           </span>
         </span>
+
+        <div className="group relative" onWheel={handleVolumeWheel}>
+          <Button
+            aria-label={`Volume de ${sound.name}: ${draftVolume}%`}
+            className="grid size-9 min-w-0 place-items-center rounded-lg border border-rpg-border text-rpg-muted transition hover:border-rpg-primary hover:text-rpg-primary focus:border-rpg-primary focus:text-rpg-primary focus:outline-none"
+            isIconOnly
+            onPress={() => handleVolumeChange(draftVolume === 0 ? 80 : 0)}
+            variant="secondary"
+          >
+            <VolumeIcon className="h-4 w-4" />
+          </Button>
+          <div className="pointer-events-none absolute bottom-[calc(100%+0.5rem)] right-0 z-20 w-40 rounded-xl border border-rpg-border bg-rpg-surface p-3 opacity-0 shadow-xl shadow-rpg-text/10 transition hover:pointer-events-auto hover:opacity-100 focus-within:pointer-events-auto focus-within:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100">
+            <Slider
+              aria-label={`Volume de ${sound.name}`}
+              maxValue={100}
+              minValue={0}
+              onChange={(value) => handleVolumeChange(getSliderNumber(value))}
+              step={5}
+              value={draftVolume}
+            >
+              <Slider.Track className="relative h-1.5 rounded-full bg-rpg-primary-soft">
+                <Slider.Fill className="absolute h-full rounded-full bg-rpg-primary" />
+                <Slider.Thumb className="top-1/2 size-4 rounded-full border-2 border-white bg-rpg-primary shadow-md" />
+              </Slider.Track>
+            </Slider>
+          </div>
+        </div>
       </div>
 
-      <div className="flex items-center gap-2">
-        <button
+      <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3">
+        <div className="flex items-center gap-2">
+        <Button
           aria-label={`${isPlaying ? "Pausar" : "Tocar"} ${sound.name}`}
-          className={`grid size-8 place-items-center rounded-md transition ${
+          className={`grid size-9 min-w-0 place-items-center rounded-lg transition ${
             isPlaying
               ? "bg-rpg-primary text-white"
               : "border border-rpg-border text-rpg-muted hover:border-rpg-primary hover:text-rpg-primary"
           }`}
-          onClick={handleTogglePlay}
-          type="button"
+          isDisabled={updateSoundMutation.isPending}
+          isIconOnly
+          onPress={handleTogglePlayback}
+          variant="secondary"
         >
           {isPlaying ? (
             <PauseIcon className="h-4 w-4" />
           ) : (
             <PlayIcon className="h-4 w-4" />
           )}
-        </button>
-        <button
+        </Button>
+        <Button
           aria-label={`Parar ${sound.name}`}
-          className="grid size-8 place-items-center rounded-md border border-rpg-border text-rpg-muted transition hover:border-rpg-danger hover:text-rpg-danger"
-          onClick={handleStop}
-          type="button"
+          className="grid size-9 min-w-0 place-items-center rounded-lg border border-rpg-border text-rpg-muted transition hover:border-rpg-danger hover:text-rpg-danger"
+          isDisabled={updateSoundMutation.isPending}
+          isIconOnly
+          onPress={handleStopSound}
+          variant="secondary"
         >
           <SquareIcon className="h-3 w-3 fill-current" />
-        </button>
-        <button
-          aria-label={`${isLooping ? "Desativar" : "Ativar"} repeticao de ${sound.name}`}
-          className={`grid size-8 place-items-center rounded-md border transition ${
+        </Button>
+        <Button
+          aria-label={`${isLooping ? "Desligar repeticao" : "Ligar repeticao"} de ${sound.name}`}
+          className={`grid size-9 min-w-0 place-items-center rounded-lg transition ${
             isLooping
-              ? "border-rpg-primary bg-rpg-primary-soft text-rpg-primary"
-              : "border-rpg-border text-rpg-muted hover:border-rpg-primary hover:text-rpg-primary"
+              ? "bg-rpg-primary-soft text-rpg-primary ring-1 ring-rpg-primary/40"
+              : "border border-rpg-border text-rpg-muted hover:border-rpg-primary hover:text-rpg-primary"
           }`}
-          onClick={handleToggleLoop}
-          type="button"
+          isDisabled={updateSoundMutation.isPending}
+          isIconOnly
+          onPress={() => updateSoundMutation.mutate({ isLooping: !isLooping })}
+          variant="secondary"
         >
-          <RepeatIcon className="h-4 w-4" />
-        </button>
-        <span className="ml-auto text-xs font-black text-rpg-muted">
-          {formatSoundTime(currentTime)} / {formatSoundTime(duration)}
+          <Repeat2Icon className="h-4 w-4" />
+        </Button>
+        </div>
+
+        <div className="grid min-w-0 gap-1">
+          <Slider
+            aria-label={`Linha do tempo de ${sound.name}`}
+            maxValue={duration || Math.max(1, elapsedSeconds)}
+            minValue={0}
+            onChange={(value) => handleSeek(getSliderNumber(value))}
+            step={1}
+            value={duration > 0 ? elapsedSeconds : 0}
+          >
+            <Slider.Track className="relative h-1.5 rounded-full bg-rpg-primary-soft">
+              <Slider.Fill className="absolute h-full rounded-full bg-rpg-primary" />
+              <Slider.Thumb className="top-1/2 size-4 rounded-full border-2 border-white bg-rpg-primary shadow-md" />
+            </Slider.Track>
+          </Slider>
+          <div className="flex items-center justify-between text-[0.68rem] font-black text-rpg-muted">
+            <span>{formatDuration(elapsedSeconds)}</span>
+            <span>{duration > 0 ? formatDuration(duration) : "--:--"}</span>
+          </div>
+        </div>
+
+        <span className="rounded-lg bg-rpg-surface-muted px-2.5 py-2 text-right text-xs font-black text-rpg-muted">
+          {draftVolume}%
         </span>
       </div>
-
-      <input
-        className="w-full accent-rpg-primary"
-        max={duration || 0}
-        min={0}
-        onChange={(event) => handleSeek(event.target.value)}
-        step={0.1}
-        type="range"
-        value={duration ? currentTime : 0}
-      />
-
-      <audio
-        onEnded={() => {
-          if (!isLooping) {
-            setIsPlaying(false);
-          }
-        }}
-        onLoadedMetadata={(event) => setDuration(event.currentTarget.duration)}
-        onPause={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
-        onTimeUpdate={(event) => setCurrentTime(event.currentTarget.currentTime)}
-        ref={audioRef}
-        src={getCampaignAssetUrl(sound.audioUrl)}
-      />
     </div>
+  );
+}
+
+function TableSharedAudio({ sounds }: Readonly<{ sounds: CampaignSound[] }>) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const { showToast } = useToast();
+  const [isAudioBlocked, setIsAudioBlocked] = useState(false);
+  const playingSound = useMemo(
+    () =>
+      sounds
+        .filter((sound) => sound.isPlaying)
+        .sort((firstSound, secondSound) =>
+          (secondSound.lastStartedAt ?? "").localeCompare(
+            firstSound.lastStartedAt ?? "",
+          ),
+        )[0],
+    [sounds],
+  );
+  const audioUrl = getCampaignAssetUrl(playingSound?.audioUrl);
+  const playingSoundLastStartedAt = playingSound?.lastStartedAt ?? "";
+  const playbackKey = `${playingSound?.id ?? ""}:${playingSoundLastStartedAt}`;
+  const volume = (playingSound?.volume ?? 80) / 100;
+  const isLooping = Boolean(playingSound?.isLooping);
+  const playbackPosition = playingSound?.playbackPosition ?? 0;
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.volume = volume;
+  }, [volume]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    audio.loop = isLooping;
+  }, [isLooping]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    if (!playbackKey || playbackKey === ":" || !audioUrl) {
+      audio.pause();
+      audio.currentTime = 0;
+      return;
+    }
+
+    if (audio.src !== audioUrl) {
+      audio.src = audioUrl;
+    }
+
+    const startedAtTimestamp = playingSoundLastStartedAt
+      ? new Date(playingSoundLastStartedAt).getTime()
+      : Number.NaN;
+    const synchronizedPosition = Number.isFinite(startedAtTimestamp)
+      ? Math.max(0, (Date.now() - startedAtTimestamp) / 1000)
+      : playbackPosition;
+
+    if (Math.abs(audio.currentTime - synchronizedPosition) > 1) {
+      try {
+        audio.currentTime = synchronizedPosition;
+      } catch {
+        audio.currentTime = 0;
+      }
+    }
+
+    void audio.play().then(
+      () => setIsAudioBlocked(false),
+      () => {
+        setIsAudioBlocked(true);
+        showToast({
+          title: "Audio bloqueado pelo navegador",
+          description: "Clique em Ativar audio para ouvir a mesa.",
+          type: "error",
+        });
+      },
+    );
+  }, [audioUrl, playbackKey, playbackPosition, playingSoundLastStartedAt, showToast]);
+
+  function handleEnableAudio() {
+    const audio = audioRef.current;
+
+    if (!audio) {
+      return;
+    }
+
+    void audio.play().then(() => setIsAudioBlocked(false));
+  }
+
+  return (
+    <>
+      <audio ref={audioRef} />
+      <AnimatePresence>
+        {isAudioBlocked && playingSound ? (
+          <motion.button
+            animate={{ opacity: 1, y: 0 }}
+            className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-rpg-primary px-4 py-2 text-sm font-black text-white shadow-xl shadow-rpg-primary/25"
+            exit={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: 12 }}
+            onClick={handleEnableAudio}
+            type="button"
+          >
+            Ativar audio da mesa
+          </motion.button>
+        ) : null}
+      </AnimatePresence>
+    </>
   );
 }
 
@@ -1867,7 +2290,7 @@ function GridControls({
   }
 
   return (
-    <section className="grid max-h-[calc(100vh-3rem)] gap-4 overflow-y-auto rounded-2xl border border-rpg-border bg-rpg-surface p-4 shadow-2xl shadow-rpg-text/15">
+    <section className="grid max-h-[28rem] gap-4 overflow-y-auto rounded-xl border border-rpg-border bg-white p-3 shadow-sm">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
           <Grid3X3Icon className="h-4 w-4 shrink-0 text-rpg-primary" />
@@ -2078,17 +2501,6 @@ function formatChatTime(value: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(value));
-}
-
-function formatSoundTime(value: number) {
-  if (!Number.isFinite(value)) {
-    return "0:00";
-  }
-
-  const minutes = Math.floor(value / 60);
-  const seconds = Math.floor(value % 60);
-
-  return `${minutes}:${String(seconds).padStart(2, "0")}`;
 }
 
 function getTokenStatusStyle(status: CampaignTableTokenStatus) {
@@ -2307,6 +2719,64 @@ function getCharacterInitials(name?: string) {
 
 function clampNumber(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
+}
+
+function getSliderNumber(value: number | number[]) {
+  if (Array.isArray(value)) {
+    return value[0] ?? 0;
+  }
+
+  return value;
+}
+
+function getSoundElapsedSeconds({
+  duration,
+  isLooping,
+  isPlaying,
+  now,
+  playbackPosition,
+  startedAt,
+}: Readonly<{
+  duration: number;
+  isLooping: boolean;
+  isPlaying: boolean;
+  now: number;
+  playbackPosition: number;
+  startedAt?: string;
+}>) {
+  if (!isPlaying || !startedAt) {
+    return playbackPosition;
+  }
+
+  const startedAtTimestamp = new Date(startedAt).getTime();
+
+  if (!Number.isFinite(startedAtTimestamp)) {
+    return playbackPosition;
+  }
+
+  const rawElapsedSeconds = Math.max(0, (now - startedAtTimestamp) / 1000);
+
+  if (duration <= 0) {
+    return rawElapsedSeconds;
+  }
+
+  if (isLooping) {
+    return rawElapsedSeconds % duration;
+  }
+
+  return Math.min(rawElapsedSeconds, duration);
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) {
+    return "0:00";
+  }
+
+  const totalSeconds = Math.floor(seconds);
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+
+  return `${minutes}:${String(remainingSeconds).padStart(2, "0")}`;
 }
 
 function updateCampaignCache(
