@@ -1,0 +1,14 @@
+Dice icons are from Flaticon UIcons by Freepik.
+
+Source package: @flaticon/flaticon-uicons
+Source site: https://www.flaticon.com/uicons
+License: see FLATICON-UICONS-LICENSE.txt in this folder.
+Implementation: SVG paths extracted from the Flaticon UIcons solid rounded font.
+
+Used icons:
+- dice-d4
+- dice-d6
+- dice-d8
+- dice-d10
+- dice-d12
+- dice-d20

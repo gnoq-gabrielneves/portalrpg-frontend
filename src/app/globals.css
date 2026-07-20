@@ -1,26 +1,50 @@
 @import "tailwindcss";
+@import "@heroui/styles";
 
+/* Tema principal do app: paleta inspirada na tela de login. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --rpg-night: #100b1f;
+  --rpg-night-deep: #080711;
+  --rpg-night-soft: #21123f;
+  --rpg-primary: #7c3aed;
+  --rpg-primary-hover: #6d28d9;
+  --rpg-primary-soft: #ede9fe;
+  --rpg-accent: #f97316;
+  --rpg-gold: #fcd34d;
+  --rpg-success: #6ee7b7;
+  --rpg-danger: #e11d48;
+  --rpg-surface: #ffffff;
+  --rpg-surface-muted: #f8fafc;
+  --rpg-border: #e2e8f0;
+  --rpg-text: #020617;
+  --rpg-text-muted: #64748b;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Tokens do Tailwind 4: permitem usar classes como bg-rpg-primary e text-rpg-muted. */
+@theme {
+  --color-rpg-night: var(--rpg-night);
+  --color-rpg-night-deep: var(--rpg-night-deep);
+  --color-rpg-night-soft: var(--rpg-night-soft);
+  --color-rpg-primary: var(--rpg-primary);
+  --color-rpg-primary-hover: var(--rpg-primary-hover);
+  --color-rpg-primary-soft: var(--rpg-primary-soft);
+  --color-rpg-accent: var(--rpg-accent);
+  --color-rpg-gold: var(--rpg-gold);
+  --color-rpg-success: var(--rpg-success);
+  --color-rpg-danger: var(--rpg-danger);
+  --color-rpg-surface: var(--rpg-surface);
+  --color-rpg-surface-muted: var(--rpg-surface-muted);
+  --color-rpg-border: var(--rpg-border);
+  --color-rpg-text: var(--rpg-text);
+  --color-rpg-muted: var(--rpg-text-muted);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  background: var(--rpg-surface-muted);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), sans-serif;
+  background: var(--rpg-surface-muted);
+  color: var(--rpg-text);
 }
