@@ -84,6 +84,7 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { logout, user } = useAuth();
   const { data: unreadNotifications } = useNotificationUnreadCount();
+  const [hasAvatarError, setHasAvatarError] = useState(false);
   const [isProfileMenuOpen, setIsProfileMenuOpen] = useState(false);
   const displayName = user?.profile?.displayName ?? "Jogador";
   const avatarUrl = toAbsoluteApiAssetUrl(user?.profile?.avatarUrl);
@@ -184,11 +185,12 @@ export function AppSidebar() {
           type="button"
         >
           <span className="grid size-10 shrink-0 place-items-center overflow-hidden rounded-lg border border-rpg-border bg-rpg-primary text-white shadow-sm">
-            {avatarUrl ? (
+            {avatarUrl && !hasAvatarError ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
                 alt="Foto de perfil"
                 className="h-full w-full object-cover"
+                onError={() => setHasAvatarError(true)}
                 src={avatarUrl}
               />
             ) : (

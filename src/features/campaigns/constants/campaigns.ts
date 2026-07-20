@@ -1,6 +1,8 @@
 export const campaignHubTabs = [
   "Visao geral",
   "Personagens",
+  "NPCs",
+  "Ameacas",
   "Sessoes",
   "Mapas",
   "Sons",

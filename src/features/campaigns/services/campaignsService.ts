@@ -2,6 +2,7 @@ import { parseApiResponse } from "@/shared/services/apiClient";
 import {
   Campaign,
   CampaignCharacter,
+  CampaignEntityType,
   CampaignChatMessage,
   CampaignFilters,
   CampaignInvite,
@@ -181,9 +182,17 @@ export async function getCampaignMembers(
 export async function getCampaignCharacters(
   accessToken: string,
   campaignId: string,
+  entityType?: CampaignEntityType,
 ): Promise<CampaignCharacter[]> {
+  const searchParams = new URLSearchParams();
+
+  if (entityType) {
+    searchParams.set("type", entityType);
+  }
+
+  const queryString = searchParams.toString();
   const response = await fetch(
-    `${apiBaseUrl}/campaigns/${campaignId}/characters`,
+    `${apiBaseUrl}/campaigns/${campaignId}/characters${queryString ? `?${queryString}` : ""}`,
     {
       headers: {
         Authorization: `Bearer ${accessToken}`,

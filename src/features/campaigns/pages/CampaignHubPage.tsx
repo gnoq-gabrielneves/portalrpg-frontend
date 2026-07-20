@@ -64,6 +64,7 @@ import {
 import {
   Campaign,
   CampaignCharacter,
+  CampaignEntityType,
   CampaignInviteFriend,
   CampaignMap,
   CampaignMember,
@@ -127,7 +128,9 @@ const ordemAgentClassOptions: Array<{
 export function CampaignHubPage({ campaignId }: CampaignHubPageProps) {
   const { user } = useAuth();
   const { showToast } = useToast();
-  const characters = useCampaignCharacters(campaignId);
+  const playerCharacters = useCampaignCharacters(campaignId, "player_character");
+  const npcCharacters = useCampaignCharacters(campaignId, "npc");
+  const enemyCharacters = useCampaignCharacters(campaignId, "enemy");
   const createOrdemAgent = useCreateOrdemAgent();
   const { data: campaign, isLoading } = useCampaign(campaignId);
   const deleteCampaign = useDeleteCampaign();
@@ -440,9 +443,33 @@ export function CampaignHubPage({ campaignId }: CampaignHubPageProps) {
         ) : activeTab === "Personagens" ? (
           <CampaignCharactersPanel
             campaignId={campaign._id}
-            characters={characters.data ?? []}
-            isLoading={characters.isLoading}
+            characters={playerCharacters.data ?? []}
+            emptyText="Nenhum agente criado ainda."
+            entityType="player_character"
+            eyebrow="Agentes"
+            isLoading={playerCharacters.isLoading}
             onCreate={() => setIsCharacterTypeModalOpen(true)}
+            title="Personagens dos jogadores"
+          />
+        ) : activeTab === "NPCs" ? (
+          <CampaignCharactersPanel
+            campaignId={campaign._id}
+            characters={npcCharacters.data ?? []}
+            emptyText="Nenhum NPC criado ainda."
+            entityType="npc"
+            eyebrow="NPCs"
+            isLoading={npcCharacters.isLoading}
+            title="Personagens do mestre"
+          />
+        ) : activeTab === "Ameacas" ? (
+          <CampaignCharactersPanel
+            campaignId={campaign._id}
+            characters={enemyCharacters.data ?? []}
+            emptyText="Nenhuma ameaça criada ainda."
+            entityType="enemy"
+            eyebrow="Ameacas"
+            isLoading={enemyCharacters.isLoading}
+            title="Inimigos e perigos"
           />
         ) : activeTab === "Mapas" ? (
           <CampaignMapsPanel
@@ -1188,32 +1215,49 @@ function CampaignMembersPanel({
 function CampaignCharactersPanel({
   campaignId,
   characters,
+  emptyText,
+  entityType,
+  eyebrow,
   isLoading,
   onCreate,
+  title,
 }: Readonly<{
   campaignId: string;
   characters: CampaignCharacter[];
+  emptyText: string;
+  entityType: CampaignEntityType;
+  eyebrow: string;
   isLoading: boolean;
-  onCreate: () => void;
+  onCreate?: () => void;
+  title: string;
 }>) {
+  const actionLabel = getCampaignEntityCreateLabel(entityType);
+
   return (
     <div className="grid gap-4 p-6">
       <div className="flex flex-col justify-between gap-3 rounded-lg bg-rpg-surface-muted p-5 sm:flex-row sm:items-center">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-rpg-muted">
-            Personagens
-          </p>
-          <h2 className="mt-2 text-lg font-black tracking-normal text-rpg-text">
-            Fichas da campanha
-          </h2>
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-rpg-primary text-white shadow-lg shadow-rpg-primary/20">
+            {getCampaignEntityIcon(entityType)}
+          </span>
+          <span className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-rpg-muted">
+              {eyebrow}
+            </p>
+            <h2 className="mt-2 text-lg font-black tracking-normal text-rpg-text">
+              {title}
+            </h2>
+          </span>
         </div>
-        <Button
-          className="flex w-fit items-center gap-2 rounded-lg bg-rpg-primary px-4 py-3 font-bold text-white shadow-lg shadow-rpg-primary/20 transition hover:bg-rpg-primary-hover"
-          onPress={onCreate}
-        >
-          <PlusIcon className="h-5 w-5" />
-          Novo personagem
-        </Button>
+        {onCreate ? (
+          <Button
+            className="flex w-fit items-center gap-2 rounded-lg bg-rpg-primary px-4 py-3 font-bold text-white shadow-lg shadow-rpg-primary/20 transition hover:bg-rpg-primary-hover"
+            onPress={onCreate}
+          >
+            <PlusIcon className="h-5 w-5" />
+            {actionLabel}
+          </Button>
+        ) : null}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
@@ -1224,7 +1268,7 @@ function CampaignCharactersPanel({
         ) : null}
         {!isLoading && characters.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-rpg-border bg-rpg-surface-muted p-4 text-sm font-semibold text-rpg-muted">
-            Nenhum personagem criado ainda.
+            {emptyText}
           </p>
         ) : null}
         {characters.map((character) => (
@@ -2338,12 +2382,12 @@ function CampaignCharacterItem({
   const createdAt = character.createdAt
     ? new Date(character.createdAt).toLocaleDateString("pt-BR")
     : "sem data";
-
-  return (
-    <Link
-      className="group grid min-h-36 grid-cols-[8.5rem_minmax(0,1fr)] overflow-hidden rounded-lg border border-rpg-border bg-rpg-surface text-rpg-text shadow-sm transition hover:border-rpg-primary hover:shadow-lg hover:shadow-rpg-primary/10"
-      href={`/campaigns/${campaignId}/characters/${character.entityId}`}
-    >
+  const isPlayerCharacter = character.type === "player_character";
+  const classLabel = isPlayerCharacter
+    ? getOrdemAgentClassLabel(character.agentClass)
+    : getCampaignEntityTypeLabel(character.type);
+  const content = (
+    <>
       <span className="grid h-full min-h-36 place-items-center overflow-hidden bg-rpg-surface-muted">
         {avatarUrl ? (
           <span
@@ -2364,19 +2408,78 @@ function CampaignCharacterItem({
             {character.name}
           </span>
           <span className="mt-1 block truncate text-sm font-bold text-rpg-primary">
-            {getOrdemAgentClassLabel(character.agentClass)}
+            {classLabel}
           </span>
           <span className="mt-2 block truncate text-xs font-semibold text-rpg-muted">
             Registrado em {createdAt}
           </span>
         </span>
 
-        <span className="ml-auto inline-flex w-fit items-center rounded-md bg-rpg-primary px-3 py-2 text-xs font-black text-white shadow-lg shadow-rpg-primary/20 transition group-hover:bg-rpg-primary-hover">
-          Acessar ficha
+        <span
+          className={`ml-auto inline-flex w-fit items-center rounded-md px-3 py-2 text-xs font-black shadow-lg transition ${
+            isPlayerCharacter
+              ? "bg-rpg-primary text-white shadow-rpg-primary/20 group-hover:bg-rpg-primary-hover"
+              : "bg-rpg-surface-muted text-rpg-muted shadow-transparent"
+          }`}
+        >
+          {isPlayerCharacter ? "Acessar ficha" : "Ficha em breve"}
         </span>
       </span>
+    </>
+  );
+
+  if (!isPlayerCharacter) {
+    return (
+      <div className="group grid min-h-36 grid-cols-[8.5rem_minmax(0,1fr)] overflow-hidden rounded-lg border border-rpg-border bg-rpg-surface text-rpg-text shadow-sm">
+        {content}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      className="group grid min-h-36 grid-cols-[8.5rem_minmax(0,1fr)] overflow-hidden rounded-lg border border-rpg-border bg-rpg-surface text-rpg-text shadow-sm transition hover:border-rpg-primary hover:shadow-lg hover:shadow-rpg-primary/10"
+      href={`/campaigns/${campaignId}/characters/${character.entityId}`}
+    >
+      {content}
     </Link>
   );
+}
+
+function getCampaignEntityIcon(entityType: CampaignEntityType) {
+  if (entityType === "npc") {
+    return <UsersIcon className="h-5 w-5" />;
+  }
+
+  if (entityType === "enemy") {
+    return <ShieldIcon className="h-5 w-5" />;
+  }
+
+  return <UserRoundIcon className="h-5 w-5" />;
+}
+
+function getCampaignEntityCreateLabel(entityType: CampaignEntityType) {
+  if (entityType === "npc") {
+    return "Novo NPC";
+  }
+
+  if (entityType === "enemy") {
+    return "Nova ameaca";
+  }
+
+  return "Novo personagem";
+}
+
+function getCampaignEntityTypeLabel(entityType: CampaignEntityType) {
+  if (entityType === "npc") {
+    return "NPC";
+  }
+
+  if (entityType === "enemy") {
+    return "Ameaca";
+  }
+
+  return "Agente";
 }
 
 function CampaignMemberItem({ member }: Readonly<{ member: CampaignMember }>) {
@@ -2465,7 +2568,7 @@ function InviteFriendItem({
     : getInviteFriendStatusLabel(inviteFriend.status, campaignId);
 
   return (
-    <div className="grid gap-3 rounded-2xl border border-rpg-border bg-rpg-surface-muted p-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+    <div className="grid gap-3 rounded-2xl border border-rpg-border bg-rpg-surface-muted p-4 md:grid-cols-[minmax(0,1fr)_11.5rem] md:items-center">
       <div className="flex min-w-0 items-center gap-3">
         <UserAvatar
           avatarUrl={inviteFriend.friend.avatarUrl}
@@ -2482,7 +2585,7 @@ function InviteFriendItem({
       </div>
 
       <Button
-        className={`flex w-full min-w-36 shrink-0 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold sm:w-auto ${
+        className={`flex w-full min-w-0 shrink-0 items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-bold ${
           canInvite
             ? "bg-rpg-primary text-white shadow-lg shadow-rpg-primary/20"
             : "border border-rpg-border text-rpg-muted"
@@ -2543,11 +2646,17 @@ function UserAvatar({
   name,
 }: Readonly<{ avatarUrl?: string; name: string }>) {
   const imageUrl = getCampaignIconUrl(avatarUrl);
+  const [hasImageError, setHasImageError] = useState(false);
 
   return (
     <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-rpg-primary text-sm font-black text-white">
-      {imageUrl ? (
-        <img alt="" className="h-full w-full object-cover" src={imageUrl} />
+      {imageUrl && !hasImageError ? (
+        <img
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => setHasImageError(true)}
+          src={imageUrl}
+        />
       ) : (
         name.slice(0, 1).toUpperCase()
       )}

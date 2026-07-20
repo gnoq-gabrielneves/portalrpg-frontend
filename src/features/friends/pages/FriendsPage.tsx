@@ -285,16 +285,18 @@ function UserRow({
   user: FriendUser;
 }>) {
   const avatarUrl = toAbsoluteApiAssetUrl(user.avatarUrl);
+  const [hasAvatarError, setHasAvatarError] = useState(false);
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-rpg-border bg-rpg-surface-muted p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <span className="grid size-11 shrink-0 place-items-center overflow-hidden rounded-xl bg-rpg-primary text-sm font-black text-white">
-          {avatarUrl ? (
-            <span
-              aria-hidden="true"
-              className="h-full w-full bg-cover bg-center"
-              style={{ backgroundImage: `url(${avatarUrl})` }}
+          {avatarUrl && !hasAvatarError ? (
+            <img
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => setHasAvatarError(true)}
+              src={avatarUrl}
             />
           ) : (
             getInitials(user.displayName)

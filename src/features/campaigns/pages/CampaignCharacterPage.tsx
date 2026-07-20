@@ -122,7 +122,7 @@ export function CampaignCharacterPage({
         characterName: character.data?.name,
         rollFormula: expression,
         rollResult: total,
-        text: title,
+        text: formatRollTitle(title),
         type: "roll",
       });
     },
@@ -621,6 +621,10 @@ function resolveRuleKey(
 
 function normalizeRuleValue(value: string) {
   return value.trim().toLocaleLowerCase("pt-BR");
+}
+
+function formatRollTitle(title: string) {
+  return title.replace(/[+*]+$/g, "").trim();
 }
 
 function applyOriginTraining(
