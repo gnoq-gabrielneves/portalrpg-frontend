@@ -43,6 +43,12 @@ html {
   background: var(--rpg-surface-muted);
 }
 
+/* Tinge controles nativos (sliders, switches, checkboxes) com o roxo da marca.
+   Sem isso o Safari desenha esses controles em azul por padrao. */
+:root {
+  accent-color: var(--rpg-primary);
+}
+
 body {
   font-family: var(--font-inter), sans-serif;
   background: var(--rpg-surface-muted);

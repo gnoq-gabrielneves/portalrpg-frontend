@@ -68,9 +68,12 @@ export type UpdateCampaignSoundPayload = Partial<{
 }>;
 
 export type CampaignTableToken = {
+  characterAvatarUrl?: string;
   characterEntityId: string;
+  characterName?: string;
   createdAt?: string;
   id: string;
+  isHidden?: boolean;
   status?: CampaignTableTokenStatus;
   x: number;
   y: number;
@@ -88,6 +91,7 @@ export type CreateCampaignTableTokenPayload = {
 };
 
 export type UpdateCampaignTableTokenPayload = Partial<{
+  isHidden: boolean;
   status: CampaignTableTokenStatus;
   x: number;
   y: number;
