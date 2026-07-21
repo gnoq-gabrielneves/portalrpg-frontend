@@ -54,6 +54,7 @@ import { fadeInUp } from "@/shared/animations/fadeInUp";
 import { useToast } from "@/shared/hooks/useToast";
 import { ApiClientError } from "@/shared/services/apiClient";
 import { useCampaignCharacters } from "../hooks/useCampaignCharacters";
+import { useCampaignRealtime } from "../hooks/useCampaignRealtime";
 import {
   clearCampaignChatMessages,
   createCampaignChatMessage,
@@ -129,6 +130,7 @@ type DraftActiveMap = {
   mapId: string;
 };
 
+
 export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
   const { accessToken, user } = useAuth();
   const { showToast } = useToast();
@@ -143,11 +145,16 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [snapTokensToGrid, setSnapTokensToGrid] = useState(true);
 
+  useCampaignRealtime(campaignId);
+
   const campaignQuery = useQuery({
     enabled: Boolean(accessToken),
     queryFn: () => getCampaign(accessToken ?? "", campaignId),
     queryKey: ["campaign", campaignId],
-    refetchInterval: 2000,
+    // Tempo real (Socket.IO) faz a atualizacao instantanea; o polling lento
+    // e so uma rede de seguranca caso o WebSocket caia.
+    refetchInterval: 12000,
+    refetchIntervalInBackground: true,
   });
   const charactersQuery = useCampaignCharacters(campaignId);
 
@@ -277,11 +284,13 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
 
   const updateTokenMutation = useMutation({
     mutationFn: ({
+      isHidden,
       status,
       tokenId,
       x,
       y,
     }: {
+      isHidden?: boolean;
       status?: CampaignTableTokenStatus;
       tokenId: string;
       x?: number;
@@ -292,6 +301,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
       }
 
       return updateCampaignTableToken(accessToken, campaignId, tokenId, {
+        isHidden,
         status,
         x,
         y,
@@ -362,6 +372,11 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
   ) {
     updateTokenCache(queryClient, campaignId, tokenId, { status });
     updateTokenMutation.mutate({ status, tokenId });
+  }
+
+  function handleToggleTokenHidden(tokenId: string, isHidden: boolean) {
+    updateTokenCache(queryClient, campaignId, tokenId, { isHidden });
+    updateTokenMutation.mutate({ isHidden, tokenId });
   }
 
   async function handleToggleFocusMode() {
@@ -504,6 +519,7 @@ export function CampaignTablePage({ campaignId }: CampaignTablePageProps) {
                 isLoading={campaignQuery.isLoading}
                 onMoveToken={handleMoveToken}
                 onSetTokenStatus={handleSetTokenStatus}
+                onToggleTokenHidden={handleToggleTokenHidden}
                 shouldSnapTokens={snapTokensToGrid}
                 tokens={tableTokens}
               />
@@ -674,7 +690,9 @@ function CampaignTableChatPanel({
     enabled: Boolean(accessToken),
     queryFn: () => getCampaignChatMessages(accessToken ?? "", campaignId),
     queryKey: ["campaign", campaignId, "chat-messages"],
-    refetchInterval: 2500,
+    // Chat chega instantaneo pelo WebSocket; polling lento como fallback.
+    refetchInterval: 12000,
+    refetchIntervalInBackground: true,
   });
 
   const createMessageMutation = useMutation({
@@ -1124,6 +1142,7 @@ function MapCanvas({
   isLoading,
   onMoveToken,
   onSetTokenStatus,
+  onToggleTokenHidden,
   shouldSnapTokens,
   tokens,
 }: Readonly<{
@@ -1138,6 +1157,7 @@ function MapCanvas({
     tokenId: string,
     status: CampaignTableTokenStatus,
   ) => void;
+  onToggleTokenHidden: (tokenId: string, isHidden: boolean) => void;
   shouldSnapTokens: boolean;
   tokens: CampaignTableToken[];
 }>) {
@@ -1379,21 +1399,13 @@ function MapCanvas({
       }`}
     >
       <div
-        className={`relative mx-auto grid place-items-center overflow-hidden rounded-2xl border border-rpg-border bg-slate-50 shadow-inner ${
-          isFocusMode
-            ? "h-full min-h-0 w-max min-w-full"
-            : "h-full min-h-0 w-full min-w-[42rem]"
-        }`}
+        className="relative mx-auto grid h-full min-h-0 w-full place-items-center overflow-hidden rounded-2xl border border-rpg-border bg-slate-50 shadow-inner"
         ref={boardRef}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           alt={activeMap.name}
-          className={
-            isFocusMode
-              ? "h-full max-w-none select-none object-contain"
-              : "max-h-full max-w-full select-none object-contain"
-          }
+          className="max-h-full max-w-full select-none object-contain"
           draggable={false}
           onLoad={updateImageMetrics}
           ref={imageRef}
@@ -1416,10 +1428,13 @@ function MapCanvas({
         ) : null}
         {tokens.map((token) => {
           const character = charactersByEntityId.get(token.characterEntityId);
+          const tokenName = character?.name ?? token.characterName;
+          const tokenAvatarUrl = character?.avatarUrl ?? token.characterAvatarUrl;
           const position = getTokenBoardPosition(token);
           const tokenStatus = token.status ?? "normal";
           const statusStyle = getTokenStatusStyle(tokenStatus);
           const isStatusMenuOpen = statusMenuTokenId === token.id;
+          const isHidden = Boolean(token.isHidden);
 
           return (
             <div
@@ -1431,12 +1446,12 @@ function MapCanvas({
               }}
             >
               <button
-                aria-label={`Mover token ${character?.name ?? "sem ficha"}`}
+                aria-label={`Mover token ${tokenName ?? "sem ficha"}`}
                 className={`relative grid place-items-center rounded-full border-2 text-sm font-black text-white shadow-lg shadow-slate-950/20 transition focus:outline-none focus:ring-4 focus:ring-rpg-primary/20 ${statusStyle.ring} ${statusStyle.background} ${
                   canMoveTokens
                     ? "cursor-grab hover:scale-105"
                     : "cursor-default"
-                }`}
+                } ${isHidden ? "opacity-45 grayscale" : ""}`}
                 onDoubleClick={() => handleTokenDoubleClick(token.id)}
                 onPointerDown={(event) => handleTokenPointerDown(event, token)}
                 onPointerMove={handleTokenPointerMove}
@@ -1446,20 +1461,29 @@ function MapCanvas({
                   touchAction: "none",
                   width: scaledTokenSize,
                 }}
-                title={character?.name ?? "Token sem ficha"}
+                title={
+                  isHidden
+                    ? `${tokenName ?? "Token"} (oculto dos jogadores)`
+                    : (tokenName ?? "Token sem ficha")
+                }
                 type="button"
               >
-                {character?.avatarUrl ? (
+                {tokenAvatarUrl ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img
                     alt=""
                     className={`h-full w-full rounded-full object-cover ${statusStyle.image}`}
                     draggable={false}
-                    src={getCampaignAssetUrl(character.avatarUrl)}
+                    src={getCampaignAssetUrl(tokenAvatarUrl)}
                   />
                 ) : (
-                  getCharacterInitials(character?.name)
+                  getCharacterInitials(tokenName)
                 )}
+                {isHidden ? (
+                  <span className="absolute -left-1 -top-1 grid size-5 place-items-center rounded-full border border-white bg-slate-900 text-white shadow-sm">
+                    <EyeOffIcon className="h-3 w-3" />
+                  </span>
+                ) : null}
                 {tokenStatus !== "normal" ? (
                   <span
                     className={`absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full border border-white text-white shadow-sm ${statusStyle.badge}`}
@@ -1493,6 +1517,26 @@ function MapCanvas({
                       {option.label}
                     </button>
                   ))}
+                  <div className="my-1 border-t border-rpg-border" />
+                  <button
+                    className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs font-black transition ${
+                      isHidden
+                        ? "bg-rpg-primary-soft text-rpg-primary"
+                        : "text-rpg-muted hover:bg-rpg-surface-muted hover:text-rpg-text"
+                    }`}
+                    onClick={() => {
+                      onToggleTokenHidden(token.id, !isHidden);
+                      setStatusMenuTokenId(null);
+                    }}
+                    type="button"
+                  >
+                    {isHidden ? (
+                      <EyeIcon className="h-4 w-4" />
+                    ) : (
+                      <EyeOffIcon className="h-4 w-4" />
+                    )}
+                    {isHidden ? "Revelar aos jogadores" : "Ocultar dos jogadores"}
+                  </button>
                 </div>
               ) : null}
             </div>
